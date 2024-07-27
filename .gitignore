@@ -130,3 +130,4 @@ dist
 .pnp.*
 config.json
 src/controllers/test.js
+package-lock.json
