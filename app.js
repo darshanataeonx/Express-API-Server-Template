@@ -1,5 +1,5 @@
 const express = require('express');
-const Logger = require('./src/helpers/Logger');
+const Logger = require('./src/helpers/logger');
 const ConfigManager = require('./src/helpers/configManager');
 
 /**
@@ -52,13 +52,13 @@ class App {
                 this.#configManager = new ConfigManager('config.json');
                 this.#logger = new Logger(this.#configManager.getConfig('log'));
                 this.server = express();
-                this.server.on('start', () => {console.log('app.........');})
         }
         /**
          * Starting the express server.
          */
         startTheServer() {
                 this.server.listen(this.#configManager.getConfig('port'), () => {
+                        console.clear();
                         this.#logger.info('SYS', 'Server is started.');
                 });
         }

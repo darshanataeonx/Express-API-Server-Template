@@ -6,7 +6,6 @@ const fs = require('fs');
  * 
  * Usage:
  * const configManager = new ConfigManager('./config.json');
- * configManager.validateConfig();
  * 
  * @autor Darshan Ramjiyani
  * @version 2.0.0
@@ -24,7 +23,7 @@ class ConfigManager {
                 this.configFilePath = configFilePath;
                 this.#loadConfig();
                 this.allowedKeys = {
-                        'app_env': ['live', 'local'],
+                        'app_env': 'string',
                         'local': {
                                 'app_name': 'string',
                                 'port': 'number',
@@ -82,6 +81,7 @@ class ConfigManager {
                                 }
                         }
                 };
+                this.validateConfig(this.#config, this.allowedKeys);
         }
 
         /**
@@ -97,15 +97,6 @@ class ConfigManager {
         }
 
         /**
-         * Validates the loaded configuration against allowed keys.
-         * 
-         * @throws {InvalidConfigError} - Throws an error if an invalid key is found.
-         */
-        validateConfig() {
-                this.validateObject(this.config, this.allowedKeys);
-        }
-
-        /**
          * Recursively validates an object against allowed keys.
          * 
          * @param {Object} obj - The object to validate.
@@ -114,21 +105,26 @@ class ConfigManager {
          * @throws {InvalidConfigError} - Throws an error if an invalid key is found.
          * @private
          */
-        validateObject(obj, schema, path = '') {
-                if (typeof obj !== 'object' || obj === null) throw new InvalidConfigError(`Invalid type at path: ${path}. Expected an object.`);
-                Object.keys(obj).forEach(key => {
+        validateConfig(config, allowedKeys, path = '') {
+                for (const key in config) {
                         const fullPath = path ? `${path}.${key}` : key;
-                        if (!(key in schema)) throw new InvalidConfigError(`Unexpected key: ${fullPath}`);
-                        const expectedType = schema[key];
-                        const value = obj[key];
-                        if (typeof expectedType === 'string') {
-                                if (typeof value !== expectedType)
-                                        throw new InvalidConfigError(`Invalid type at path: ${fullPath}. Expected ${expectedType}, got ${typeof value}.`);
+
+                        if (!(key in allowedKeys)) {
+                                throw new Error(`Invalid key "${fullPath}" in configuration.`);
                         }
-                        else if (typeof expectedType === 'object') this.validateObject(value, expectedType, fullPath);
-                        else throw new InvalidConfigError(`Invalid schema type at path: ${fullPath}`);
-                });
+
+                        const expectedType = allowedKeys[key];
+                        const actualValue = config[key];
+                        const actualType = Array.isArray(actualValue) ? 'array' : typeof actualValue;
+
+                        if (typeof expectedType === 'object' && actualType === 'object') {
+                                this.validateConfig(actualValue, expectedType, fullPath);
+                        } else if (expectedType !== actualType) {
+                                throw new Error(`Invalid type for key "${fullPath}". Expected "${expectedType}" but got "${actualType}".`);
+                        }
+                }
         }
+
         getConfig(keyPath) {
                 if (!keyPath) return this.#config[this.#config['app_env']];
                 const keys = keyPath.split('.').map(e => e.toLowerCase());
