@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const ConfigManager = require('./configManager');
 
 /**
  * Logger class file.
@@ -26,7 +27,38 @@ class Logger extends console.Console {
          * @private {Object} STDOUT_COLORS
          * @description
          */
-        #STDOUT_COLORS = {};
+        #STDOUT_COLORS = {
+                reset: "\x1b[0m",
+                bright: "\x1b[1m",
+                dim: "\x1b[2m",
+                underscore: "\x1b[4m",
+                blink: "\x1b[5m",
+                reverse: "\x1b[7m",
+                hidden: "\x1b[8m",
+                fg: {
+                        Black: "\x1b[30m",
+                        Red: "\x1b[31m",
+                        Green: "\x1b[32m",
+                        Yellow: "\x1b[33m",
+                        Blue: "\x1b[34m",
+                        Magenta: "\x1b[35m",
+                        Cyan: "\x1b[36m",
+                        White: "\x1b[37m",
+                        Gray: "\x1b[90m"
+                },
+
+                bg: {
+                        Black: "\x1b[40m",
+                        Red: "\x1b[41m",
+                        Green: "\x1b[42m",
+                        Yellow: "\x1b[43m",
+                        Blue: "\x1b[44m",
+                        Magenta: "\x1b[45m",
+                        Cyan: "\x1b[46m",
+                        White: "\x1b[47m",
+                        Gray: "\x1b[100m"
+                }
+        };
 
         /**
          * @private {Object} CONFIG
@@ -47,7 +79,9 @@ class Logger extends console.Console {
                         INFO: 'Info',
                         WARN: 'Warn',
                         ERROR: 'Error',
-                        DEBUG: 'Debug'
+                        DEBUG: 'Debug',
+                        REQ: 'Req',
+                        RES: 'Res'
                 };
         }
 
@@ -91,6 +125,17 @@ class Logger extends console.Console {
                 this.log(this.logLevels.DEBUG, requestId, message);
         }
 
+        req(id, url){
+                this.log(this.logLevels.REQ, id, url);
+        }
+        static res(id, message){
+                const instance = new Logger(new ConfigManager().getConfig('log'));
+                instance.res(id, message);
+        }
+        res(id, message){
+                this.log(this.logLevels.RES, id, message);
+        }
+
         /**
          * Logs a message with a specified log level.
          * 
@@ -99,12 +144,13 @@ class Logger extends console.Console {
          * @param {string} message - The message to log.
          */
         log(level, id, message) {
-                message = `[${id}] [${level}]\t: ${message}`;
+                message = `${this.#STDOUT_COLORS.bright}${this.#STDOUT_COLORS.fg.Red}[${id}]${this.#STDOUT_COLORS.reset}${this.#getStdOutColorBasedOnLogLevel(level)}[${level}]${this.#STDOUT_COLORS.reset} ${message}`;
                 console.log(message);
+                message = message.replace(/\x1b\[\d+m/g, '');
                 if (level === this.logLevels.ERROR || level === this.logLevels.WARN) {
-                        super.error(`${require('dayjs')().format("DD-MM-YYYY hh:mm:ss")}:` + message);
+                        super.error(`${require('dayjs')().format("DD-MM-YYYY hh:mm:ss")}` + message);
                 } else {
-                        super.log(`${require('dayjs')().format("DD-MM-YYYY hh:mm:ss")}:` + message);
+                        super.log(`${require('dayjs')().format("DD-MM-YYYY hh:mm:ss")}` + message);
                 }
         }
 
@@ -126,6 +172,32 @@ class Logger extends console.Console {
                         stdout: fs.createWriteStream(stdoutPath, { flags: 'a' }),
                         stderr: fs.createWriteStream(stderrPath, { flags: 'a' })
                 };
+        }
+
+        #getStdOutColorBasedOnLogLevel(logLevel) {
+                switch (logLevel) {
+                        case 'Info': return this.#STDOUT_COLORS.fg.Blue;
+                        case 'Warn': return this.#STDOUT_COLORS.fg.Yellow;
+                        case 'Error': return this.#STDOUT_COLORS.fg.Red;
+                        case 'Debug': return this.#STDOUT_COLORS.fg.Magenta;
+                        case 'Req': return this.#STDOUT_COLORS.fg.Green;
+                        case 'Res': return this.#STDOUT_COLORS.fg.Green;
+                        default: return this.#STDOUT_COLORS.fg.White;
+                }
+        }
+
+        static log(id, message) {
+                const instance = new Logger(new ConfigManager().getConfig('log'));
+                instance.info(id ? id : 'SYS', message);
+        }
+
+        static logRequest(request) {
+                const instance = new Logger(new ConfigManager().getConfig('log'));
+                const requestedUrl = `${request.protocol}://${request.get('host')}${request.url}`;
+                let ipAddress = (request.headers['x-forwarded-for'] || request.connection.remoteAddress).split(':').pop();
+                instance.req(request['x-request-id'], requestedUrl);
+                instance.info(request['x-request-id'], 'Client IP address: '+ipAddress);
+                instance.info(request['x-request-id'], `Method = ${request.method}, Query = ${JSON.stringify(request.query)}, Params = ${JSON.stringify(request.params)}, Body = ${JSON.stringify(request.body)}, Files = ${(request.files) ? 'true' : 'false'}`);
         }
 }
 
