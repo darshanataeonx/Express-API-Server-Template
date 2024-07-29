@@ -25,7 +25,7 @@ This repository serves as a boilerplate for setting up an API server using Expre
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/express-api-server-template.git
+   git clone https://github.com/Darshan-Ramjiyani/express-api-server-template.git
    ```
 
 2. Navigate to the project directory:
