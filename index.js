@@ -1,3 +1,3 @@
-const App = require("./src/entities/app");
+import App from "./src/managers/app.js";
 const application = new App();
 application.startTheServer();
