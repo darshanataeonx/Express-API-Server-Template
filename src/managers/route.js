@@ -1,9 +1,8 @@
 import express from "express";
-import path, { dirname } from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import Authorization from "./authorization.js";
+import helmet from "helmet";
+// import Authorization from "./authorization.js";
 import Logger from "./logger.js";
+import routes from "../routes/index.js";
 /**
  * RouteManager class.
  * This class is responsible for managing and registering all routes for the Express server instance,
@@ -27,8 +26,8 @@ class RouteManager {
 	 */
 	constructor(expressServerInstance, databaseManagerInstance) {
 		this.#expressServerInstance = expressServerInstance;
-		this.#databaseManagerInstance = databaseManagerInstance;
-		this.#authorizationInstance = new Authorization();
+		this.databaseManagerInstance = databaseManagerInstance;
+		// this.#authorizationInstance = new Authorization();
 		this.#setEssentialRoutes();
 	}
 
@@ -38,6 +37,7 @@ class RouteManager {
 	 */
 	async #setEssentialRoutes() {
 		this.#expressServerInstance.use(express.json());
+		this.#expressServerInstance.use(helmet());
 		this.#expressServerInstance.use(
 			async (request, response, next) => {
 				const { v4 } = await import("uuid");
@@ -45,21 +45,15 @@ class RouteManager {
 				response.setHeader("x-request-id", request["x-request-id"]);
 				Logger.logRequest(request);
 				try {
-					request["__databaseConnection"] = await this.#databaseManagerInstance.acquireConnection(request["x-request-id"]);
-					await request["__databaseConnection"].beginTransaction();
+					await this.databaseManagerInstance.acquireConnection(request["x-request-id"]);
+					request["__databaseConnection"] = this.databaseManagerInstance;
+					await this.databaseManagerInstance.beginTransaction();
 				} catch (error) {
 					return next(error);
 				}
 				response.on("finish", async () => {
-					Logger.res(
-						request["x-request-id"],
-						`Response status = ${response.statusCode}`,
-					);
-					if (request["__databaseConnection"]) {
-						await request[
-							"__databaseConnection"
-						].release();
-					}
+					Logger.res(request["x-request-id"], `Response status = ${response.statusCode}`);
+					await this.databaseManagerInstance.release();
 				});
 				next();
 			},
@@ -73,16 +67,7 @@ class RouteManager {
 	 * @param {object} expressServerInstance - The Express server instance.
 	 */
 	async registerCustomRoutes() {
-		const routers = this.readRoutes(
-			dirname(fileURLToPath(import.meta.url)) + "/../routes",
-		);
-		console.log("ROUTES ==> ", routers);
-		Object.keys(routers).forEach((basePath) => {
-			this.#expressServerInstance.use(
-				basePath,
-				routers[basePath],
-			);
-		});
+		this.#expressServerInstance.use(routes);
 		this.#setErrorHandlingRoute();
 	}
 
@@ -93,13 +78,9 @@ class RouteManager {
 	async #setErrorHandlingRoute() {
 		this.#expressServerInstance.use(async (err, req, res, next) => {
 			console.error(err.stack);
-			if (req["__databaseConnection"]) req["__databaseConnection"].rollback();
-			res.status(500).json({
-				error: true,
-				message: err.message
-			});
+			if (req["__databaseConnection"]) await this.databaseManagerInstance.rollbackTransaction();
+			res.status(500).json({ error: true, message: err.message });
 		});
-
 		this.#setNotFoundRoute();
 	}
 
@@ -109,61 +90,8 @@ class RouteManager {
 	 */
 	#setNotFoundRoute() {
 		this.#expressServerInstance.use(async (req, res) => {
-			res.status(404)
-				.json({
-					error: true,
-					message: "Not found.",
-				})
-				.end();
+			res.status(404).json({ error: true, message: "Not found." }).end();
 		});
-		// console.log(this.#expressServerInstance._router.stack);
-	}
-
-	/**
-	 * Reads routes from the specified directory.
-	 *
-	 * @param {string} directory - The path to the routes directory.
-	 * @returns {Object} - An object where keys are the base paths and values are the router objects.
-	 */
-	readRoutes(directory) {
-		if (!fs.existsSync(directory))
-			throw new Error(
-				`Invalid routes directory '${directory}'.`,
-			);
-		const routers = {};
-		const files = fs.readdirSync(directory);
-		// Add promise which will be fulfilled the routes 
-		// and rejects any errors encountered while reading files
-		Promise.all(
-			files.map(async (file) => {
-				const filePath = path.join(directory, file);
-				if (fs.statSync(filePath).isFile() && path.extname(file) === ".js") {
-					try {
-						let router = await import(filePath);
-						router = router.default || router;
-						const basePath = `/${path.basename(file, ".js")}`;
-						routers[basePath] = router;
-					} catch (error) {
-						console.error(`Error reading route file: ${filePath}`);
-						console.error(error.stack);
-					}
-				}
-			}),
-		).then((data) => {
-			return data;
-		});
-		// Await all promises and return the result
-		// files.forEach(async (file) => {
-		// const filePath = path.join(directory, file);
-		// if (fs.statSync(filePath).isFile() && path.extname(file) === ".js") {
-		// let router = await import(filePath);
-		// router = router.default || router;
-		// const basePath = `/${path.basename(file, ".js")}`;
-		// routers[basePath] = router;
-		// }
-		// });
-		// console.log("144 => ", routers);
-		// return routers;
 	}
 }
 

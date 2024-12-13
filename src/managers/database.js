@@ -26,6 +26,14 @@ class DatabaseManager {
 	#logger;
 
 	/**
+	 * @private
+	 * @type {Connection}
+	 * @description Holds the MySQL connection instance.
+	 */
+	#connection;
+
+	_currentRequestId;
+	/**
 	 * Creates an instance of DatabaseManager.
 	 *
 	 * @constructor
@@ -37,15 +45,9 @@ class DatabaseManager {
 		this.#logger.info("SYS", "Generating new database connection pool...");
 		try {
 			this.#pool = mysql.createPool(configs);
-			this.#logger.info(
-				"SYS",
-				"New database connection pool created successfully.",
-			);
+			this.#logger.info("SYS", "New database connection pool created successfully.");
 		} catch (error) {
-			this.#logger.error(
-				"SYS",
-				"Can't estalished new connection pool to the database server.",
-			);
+			this.#logger.error("SYS", "Can't estalished new connection pool to the database server.");
 		}
 	}
 
@@ -54,25 +56,16 @@ class DatabaseManager {
 	 * @returns {Connection} Connection object of database server.
 	 */
 	async acquireConnection(requestId) {
-		if (!requestId)
-			throw new Error("Requesting for connection without request id.");
-		this.#logger.info(
-			requestId,
-			"Acquiring connection to the database server...",
-		);
+		if (!requestId) throw new Error("Requesting for connection without request id.");
+		this._currentRequestId = requestId;
+		this.#logger.info(this._currentRequestId || "UNKNOWN-REQUEST-ID", "Acquiring connection to the database server...");
 		try {
 			if (!this.#pool) throw new Error("Pool is not defined.");
-			const connection = await this.#pool.getConnection();
-			this.#logger.info(
-				requestId,
-				"Connection to the database sever created successfully.",
-			);
-			return connection;
+			this.#connection = await this.#pool.getConnection();
+			this.verifyConnection();
+			this.#logger.info(this._currentRequestId || "UNKNOWN-REQUEST-ID", "Connection to the database sever created successfully.");
 		} catch (error) {
-			this.#logger.error(
-				requestId,
-				`Can\'t connect to the database server. Error: ${error.message}`,
-			);
+			this.#logger.error(this._currentRequestId || "UNKNOWN-REQUEST-ID", `Can\'t connect to the database server. Error: ${error.message}`);
 		}
 	}
 
@@ -83,14 +76,13 @@ class DatabaseManager {
 	 * @param {Array} placeholderValues - An array of placeholder values for the query.
 	 * @returns {Promise<Array>} - The result of the query.
 	 */
-	async _executeQuery(sql, placeholderValues) {
+	async executeQuery(sql, placeholderValues) {
 		try {
-			return await this.connection.execute(sql, placeholderValues);
+			if (!this.#connection) await this.acquireConnection(this._currentRequestId || "UNKNOWN-REQUEST-ID");
+			return (await this.#connection.execute(sql, placeholderValues))[0];
 		} catch (error) {
-			this.#logger.error(
-				"SYS",
-				`Unable to execute sql query. Query: ${sql} | Error: ${error.message}.`,
-			);
+			this.#logger.error(this._currentRequestId || "UNKNOWN-REQUEST-ID", `Unable to execute sql query. Query: ${sql} | Error: ${error.message}.`);
+			throw error;
 		}
 	}
 
@@ -104,19 +96,51 @@ class DatabaseManager {
 	 * @throws {Error} If the connection is not initialized.
 	 */
 	async verifyConnection() {
-		if (!this.connection)
+		if (!this.#connection)
 			throw new Error("Can not verify the empty database connection.");
-		this.#logger.info("SYS", "Verifying the database server connection...");
+		this.#logger.info(this._currentRequestId || "UNKNOWN-REQUEST-ID", "Verifying the database server connection...");
 		try {
-			await this.connection.ping();
-			this.#logger.info("SYS", "Connection to the database server verified.");
-			return true;
+			await this.#connection.ping();
+			this.#logger.info(this._currentRequestId || "UNKNOWN-REQUEST-ID", "Connection to the database server verified.");
 		} catch (error) {
-			this.#logger.error(
-				"SYS",
-				`Database server connection verification failed. Error: ${error.message}.`,
-			);
+			this.#logger.error(this._currentRequestId || "UNKNOWN-REQUEST-ID", `Database server connection verification failed. Error: ${error.message}.`);
 		}
+	}
+	/**
+	 * Begins a transaction on the database connection.
+	 * @returns {Promise<void>}
+	 */
+	async beginTransaction() {
+		if (!this.#connection) throw new Error("Can not begin transaction on empty database connection.");
+		return await this.#connection.beginTransaction();
+	}
+
+	/**
+	 * Commits a transaction on the database connection.
+	 * @returns {Promise<void>}
+	 */
+	async commitTransaction() {
+		if (!this.#connection) throw new Error("Can not commit transaction on empty database connection.");
+		return await this.#connection.commit();
+	}
+
+	/**
+	 * Rolls back a transaction on the database connection.
+	 * @returns {Promise<void>}
+	 */
+	async rollbackTransaction() {
+		if (!this.#connection) throw new Error("Can not rollback transaction on empty database connection.");
+		return await this.#connection.rollback();
+	}
+
+	/**
+	 * Releases the database connection.
+	 * @returns {Promise<void>}
+	 */
+	async release() {
+		if (!this.#connection) throw new Error("Can not release connection on empty database connection.");
+		this._currentRequestId = undefined;
+		return await this.#connection.release();
 	}
 }
 
