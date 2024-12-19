@@ -1,12 +1,15 @@
+import Model from "./index.js";
+
 export default class AuthModel {
-	#databaseConnection;
-	#tableName;
+	#model;
 	constructor(databaseConnection) {
-		this.#databaseConnection = databaseConnection;
-		this.#tableName = "users";
+		this.#model = new Model("users", databaseConnection);
 	}
 	async login(username, password) {
-		const sql = `SELECT id, username, role_id, tenant_id, created_at, updated_at FROM ${this.#tableName} WHERE username='${username}' AND auth_token = '${password}'`;
-		return await this.#databaseConnection.executeQuery(sql);
+		return await this.#model.select().where({ username, auth_token: password }).limit(1).execute();
+	}
+
+	async getAll(searchTerm, limit, offset) {
+		return await this.#model.select().sr().search(searchTerm).limit(limit).offset(offset).execute();
 	}
 }

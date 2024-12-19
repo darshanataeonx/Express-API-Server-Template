@@ -51,20 +51,21 @@ class App {
 	 * @constructor
 	 */
 	constructor() {
-		console.clear();
 		this.#configManager = new ConfigManager();
 		this.logger = new Logger(this.#configManager.getConfig("log"));
+		this.logger.info("SYSTEM-INITIALIZATION-INFO", "App class initialized.");
 		this.server = express();
 		this.#databaseConnection = new DatabaseManager(this.#configManager.getConfig("database"), this.logger);
-		this.#routesManager = new RouteManager(this.server, this.#databaseConnection);
+		this.#routesManager = new RouteManager(this.server, this.#databaseConnection, this.logger);
 	}
 	/**
 	 * Starting the express server.
 	 */
 	startTheServer() {
 		this.server.listen(this.#configManager.getConfig("port"), async () => {
-			this.logger.info("SYS", "Express API server is started.");
-			this.logger.debug("SYS", `URL: ${this.#configManager.getConfig("host") || this.#configManager.getConfig("url")} | PORT: ${this.#configManager.getConfig("port")}`);
+			console.clear();
+			this.logger.info("SYSTEM-STARTUP-INFO", "Express API server is started.");
+			this.logger.debug("SYSTEM-STARTUP-INFO", `URL: ${this.#configManager.getConfig("host") || this.#configManager.getConfig("url")} | PORT: ${this.#configManager.getConfig("port")}`);
 		});
 	}
 }

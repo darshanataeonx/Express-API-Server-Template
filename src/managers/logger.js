@@ -221,11 +221,10 @@ class Logger extends console.Console {
 		instance.info(id ? id : "SYS", message);
 	}
 
-	static logRequest(request) {
-		const instance = new Logger(new ConfigManager().getConfig("log"));
-		instance.req(request["x-request-id"], `${request.protocol}://${request.get("host")}${request.url}`);
-		instance.info(request["x-request-id"], "Client IP address: " + (request.headers["x-forwarded-for"] || request.connection.remoteAddress).split(":").pop());
-		instance.info(request["x-request-id"], `Method = ${request.method}, Query = ${JSON.stringify(request.query)}, Params = ${JSON.stringify(request.params)}, Body = ${JSON.stringify(request.body)}, Files = ${request.files ? "true" : "false"}`);
+	logRequest(request) {
+		this.req(request["__id"], `${this.#STDOUT_COLORS.fg.Yellow}[${request.method}]${this.#STDOUT_COLORS.reset} ${request.protocol}://${request.get("host")}${request.url}`);
+		this.info(request["__id"], "Client IP address: " + (request.headers["x-forwarded-for"] || request.connection.remoteAddress).split(":").pop());
+		this.info(request["__id"], `Method = ${request.method}, Query = ${JSON.stringify(request.query)}, Params = ${JSON.stringify(request.params)}, Body = ${JSON.stringify(request.body)}, Files = ${request.files ? "true" : "false"}`);
 	}
 }
 

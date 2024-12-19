@@ -1,6 +1,6 @@
 import express from "express";
 import helmet from "helmet";
-// import Authorization from "./authorization.js";
+import Authorization from "./authorization.js";
 import Logger from "./logger.js";
 import routes from "../routes/index.js";
 /**
@@ -17,6 +17,7 @@ class RouteManager {
 	#expressServerInstance;
 	#databaseManagerInstance;
 	#authorizationInstance;
+	#loggerInstance;
 	/**
 	 * Creates an instance of RouteManager.
 	 *
@@ -24,10 +25,11 @@ class RouteManager {
 	 * @param {object} expressServerInstance - The Express server instance.
 	 * @param {object} databaseManagerInstance - The instance of the DatabaseManager class.
 	 */
-	constructor(expressServerInstance, databaseManagerInstance) {
+	constructor(expressServerInstance, databaseManagerInstance, loggerInstance) {
 		this.#expressServerInstance = expressServerInstance;
 		this.databaseManagerInstance = databaseManagerInstance;
-		// this.#authorizationInstance = new Authorization();
+		this.#loggerInstance = loggerInstance;
+		this.#authorizationInstance = new Authorization();
 		this.#setEssentialRoutes();
 	}
 
@@ -41,18 +43,21 @@ class RouteManager {
 		this.#expressServerInstance.use(
 			async (request, response, next) => {
 				const { v4 } = await import("uuid");
-				request["x-request-id"] = v4();
-				response.setHeader("x-request-id", request["x-request-id"]);
-				Logger.logRequest(request);
+				request["__id"] = v4();
+				response.setHeader("X-Request-Id", request["__id"]);
+				// Logger.logRequest(request);
+				request['__loggerInstance'] = this.#loggerInstance;
+				this.#loggerInstance.logRequest(request);
 				try {
-					await this.databaseManagerInstance.acquireConnection(request["x-request-id"]);
+					await this.databaseManagerInstance.acquireConnection(request["__id"]);
 					request["__databaseConnection"] = this.databaseManagerInstance;
 					await this.databaseManagerInstance.beginTransaction();
 				} catch (error) {
 					return next(error);
 				}
 				response.on("finish", async () => {
-					Logger.res(request["x-request-id"], `Response status = ${response.statusCode}`);
+					delete request['__loggerInstance'];
+					Logger.res(request["__id"], `Response status = ${response.statusCode}`);
 					await this.databaseManagerInstance.release();
 				});
 				next();

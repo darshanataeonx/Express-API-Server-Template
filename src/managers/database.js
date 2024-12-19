@@ -81,7 +81,7 @@ class DatabaseManager {
 			if (!this.#connection) await this.acquireConnection(this._currentRequestId || "UNKNOWN-REQUEST-ID");
 			return (await this.#connection.execute(sql, placeholderValues))[0];
 		} catch (error) {
-			this.#logger.error(this._currentRequestId || "UNKNOWN-REQUEST-ID", `Unable to execute sql query. Query: ${sql} | Error: ${error.message}.`);
+			this.#logger.error(this._currentRequestId || "UNKNOWN-REQUEST-ID", `Unable to execute sql query. Query: ${sql} with Values: ${JSON.stringify(placeholderValues)} | Error: ${error.message}.`);
 			throw error;
 		}
 	}
